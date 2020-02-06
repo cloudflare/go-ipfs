@@ -2,10 +2,17 @@ package namesys
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
+	"sort"
 	"strings"
+	"time"
 
+	"github.com/ipfs/go-ipfs/namesys/dnssec"
+	dnscache "github.com/ipfs/go-ipfs/namesys/dnssec/cache"
 	path "github.com/ipfs/go-path"
 	opts "github.com/ipfs/interface-go-ipfs-core/options/namesys"
 	isd "github.com/jbenet/go-is-domain"
@@ -21,11 +28,17 @@ type DNSResolver struct {
 	lookupTXT LookupTXTFunc
 	// TODO: maybe some sort of caching?
 	// cache would need a timeout
+	dnssecResolver *dnssec.Resolver
 }
 
 // NewDNSResolver constructs a name resolver using DNS TXT records.
 func NewDNSResolver() *DNSResolver {
-	return &DNSResolver{lookupTXT: net.LookupTXT}
+	return &DNSResolver{
+		lookupTXT: net.LookupTXT,
+		dnssecResolver: &dnssec.Resolver{
+			Cache: dnscache.New(10*time.Second, 5*time.Second, 4096),
+		},
+	}
 }
 
 // Resolve implements Resolver.
@@ -39,14 +52,16 @@ func (r *DNSResolver) ResolveAsync(ctx context.Context, name string, options ...
 }
 
 type lookupRes struct {
-	path  path.Path
-	error error
+	path     path.Path
+	cacheTag *string
+	proof    [][]byte
+	error    error
 }
 
 // resolveOnce implements resolver.
 // TXT records for a given domain name should contain a b58
 // encoded multihash.
-func (r *DNSResolver) resolveOnceAsync(ctx context.Context, name string, options opts.ResolveOpts) <-chan onceResult {
+func (r *DNSResolver) resolveOnceAsync(ctx context.Context, name string, needsProof bool, options opts.ResolveOpts) <-chan onceResult {
 	var fqdn string
 	out := make(chan onceResult, 1)
 	segments := strings.SplitN(name, "/", 2)
@@ -72,10 +87,10 @@ func (r *DNSResolver) resolveOnceAsync(ctx context.Context, name string, options
 	}
 
 	rootChan := make(chan lookupRes, 1)
-	go workDomain(r, fqdn, rootChan)
+	go workDomain(ctx, r, fqdn, needsProof, rootChan)
 
 	subChan := make(chan lookupRes, 1)
-	go workDomain(r, "_dnslink."+fqdn, subChan)
+	go workDomain(ctx, r, "_dnslink."+fqdn, needsProof, subChan)
 
 	appendPath := func(p path.Path) (path.Path, error) {
 		if len(segments) > 1 {
@@ -95,7 +110,7 @@ func (r *DNSResolver) resolveOnceAsync(ctx context.Context, name string, options
 				}
 				if subRes.error == nil {
 					p, err := appendPath(subRes.path)
-					emitOnceResult(ctx, out, onceResult{value: p, err: err})
+					emitOnceResult(ctx, out, onceResult{value: p, cacheTag: subRes.cacheTag, proof: subRes.proof, err: err})
 					return
 				}
 			case rootRes, ok := <-rootChan:
@@ -105,7 +120,7 @@ func (r *DNSResolver) resolveOnceAsync(ctx context.Context, name string, options
 				}
 				if rootRes.error == nil {
 					p, err := appendPath(rootRes.path)
-					emitOnceResult(ctx, out, onceResult{value: p, err: err})
+					emitOnceResult(ctx, out, onceResult{value: p, cacheTag: rootRes.cacheTag, proof: rootRes.proof, err: err})
 				}
 			case <-ctx.Done():
 				return
@@ -119,24 +134,44 @@ func (r *DNSResolver) resolveOnceAsync(ctx context.Context, name string, options
 	return out
 }
 
-func workDomain(r *DNSResolver, name string, res chan lookupRes) {
+func workDomain(ctx context.Context, r *DNSResolver, name string, needsProof bool, res chan lookupRes) {
 	defer close(res)
 
-	txt, err := r.lookupTXT(name)
+	var (
+		txt   []string
+		proof *dnssec.Result
+		err   error
+	)
+	if needsProof {
+		txt, proof, err = r.dnssecResolver.LookupTXT(ctx, name)
+	} else {
+		txt, err = r.lookupTXT(name)
+	}
 	if err != nil {
-		// Error is != nil
-		res <- lookupRes{"", err}
+		res <- lookupRes{"", nil, nil, err}
 		return
 	}
 
+	// Serialize proof, it one was computed
+	var rawProof []byte
+	if proof != nil {
+		rawProof, err = proof.MarshalBinary()
+		if err != nil {
+			res <- lookupRes{"", nil, nil, err}
+			return
+		}
+		rawProof = append([]byte{0}, rawProof...)
+	}
+
+	// Return first valid record
 	for _, t := range txt {
 		p, err := parseEntry(t)
 		if err == nil {
-			res <- lookupRes{p, nil}
+			res <- lookupRes{p, dnsCacheTag(txt), [][]byte{rawProof}, nil}
 			return
 		}
 	}
-	res <- lookupRes{"", ErrResolveFailed}
+	res <- lookupRes{"", nil, nil, ErrResolveFailed}
 }
 
 func parseEntry(txt string) (path.Path, error) {
@@ -155,4 +190,20 @@ func tryParseDnsLink(txt string) (path.Path, error) {
 	}
 
 	return "", errors.New("not a valid dnslink entry")
+}
+
+func dnsCacheTag(txt []string) *string {
+	quoted := make([]string, 0)
+	for _, t := range txt {
+		quoted = append(quoted, fmt.Sprintf("%q", t))
+	}
+	sort.Strings(quoted)
+
+	raw, err := json.Marshal(quoted)
+	if err != nil {
+		return nil
+	}
+	digest := fmt.Sprintf("%x", sha1.Sum(raw))
+
+	return &digest
 }

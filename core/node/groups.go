@@ -253,13 +253,15 @@ func Offline(cfg *config.Config) fx.Option {
 }
 
 // Core groups basic IPFS services
-var Core = fx.Options(
-	fx.Provide(BlockService),
-	fx.Provide(Dag),
-	fx.Provide(resolver.NewBasicResolver),
-	fx.Provide(Pinning),
-	fx.Provide(Files),
-)
+func Core(bcfg *BuildCfg) fx.Option {
+	return fx.Options(
+		fx.Provide(BlockService),
+		fx.Provide(Dag(bcfg)),
+		fx.Provide(resolver.NewBasicResolver),
+		fx.Provide(Pinning),
+		fx.Provide(Files),
+	)
+}
 
 func Networked(bcfg *BuildCfg, cfg *config.Config) fx.Option {
 	if bcfg.Online {
@@ -292,6 +294,6 @@ func IPFS(ctx context.Context, bcfg *BuildCfg) fx.Option {
 		IPNS,
 		Networked(bcfg, cfg),
 
-		Core,
+		Core(bcfg),
 	)
 }

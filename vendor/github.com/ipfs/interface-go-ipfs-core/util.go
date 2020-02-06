@@ -18,3 +18,12 @@ type ReadSeekCloser interface {
 	io.Closer
 	io.WriterTo
 }
+
+type ProofReader interface {
+	ReadChunk() ([]byte, error)
+	Close() error
+}
+
+type ProofWriter interface {
+	WriteChunk([]byte) error
+}

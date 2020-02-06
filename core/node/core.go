@@ -76,8 +76,14 @@ func (s *syncDagService) Sync() error {
 }
 
 // Dag creates new DAGService
-func Dag(bs blockservice.BlockService) format.DAGService {
-	return merkledag.NewDAGService(bs)
+func Dag(bcfg *BuildCfg) interface{} {
+	return func(bs blockservice.BlockService) format.DAGService {
+		var out format.DAGService = merkledag.NewDAGService(bs)
+		if bcfg.WrapDAG != nil {
+			out = bcfg.WrapDAG(out)
+		}
+		return out
+	}
 }
 
 // OnlineExchange creates new LibP2P backed block exchange (BitSwap)

@@ -15,6 +15,7 @@ import (
 	ds "github.com/ipfs/go-datastore"
 	dsync "github.com/ipfs/go-datastore/sync"
 	cfg "github.com/ipfs/go-ipfs-config"
+	ipld "github.com/ipfs/go-ipld-format"
 	ci "github.com/libp2p/go-libp2p-core/crypto"
 	peer "github.com/libp2p/go-libp2p-core/peer"
 )
@@ -40,6 +41,8 @@ type BuildCfg struct {
 	Routing libp2p.RoutingOption
 	Host    libp2p.HostOption
 	Repo    repo.Repo
+
+	WrapDAG func(ipld.DAGService) ipld.DAGService
 }
 
 func (cfg *BuildCfg) getOpt(key string) bool {
