@@ -236,6 +236,11 @@ func TestCommands(t *testing.T) {
 		"/cid/codecs",
 		"/cid/bases",
 		"/cid/hashes",
+		"/safemode/audit",
+		"/safemode/block",
+		"/safemode/unblock",
+		"/safemode/purge",
+		"/safemode/search",
 	}
 
 	cmdSet := make(map[string]struct{})

@@ -8,6 +8,7 @@ import (
 	name "github.com/ipfs/go-ipfs/core/commands/name"
 	ocmd "github.com/ipfs/go-ipfs/core/commands/object"
 	"github.com/ipfs/go-ipfs/core/commands/pin"
+	"github.com/ipfs/go-ipfs/core/commands/safemode"
 	unixfs "github.com/ipfs/go-ipfs/core/commands/unixfs"
 
 	cmds "github.com/ipfs/go-ipfs-cmds"
@@ -56,6 +57,7 @@ ADVANCED COMMANDS
   repo          Manipulate the IPFS repository
   stats         Various operational stats
   p2p           Libp2p stream mounting
+  safemode      Manage the blocklist
   filestore     Manage the filestore (experimental)
 
 NETWORK COMMANDS
@@ -143,6 +145,7 @@ var rootSubcommands = map[string]*cmds.Command{
 	"p2p":       P2PCmd,
 	"refs":      RefsCmd,
 	"resolve":   ResolveCmd,
+	"safemode":  safemode.SafemodeCmd,
 	"swarm":     SwarmCmd,
 	"tar":       TarCmd,
 	"file":      unixfs.UnixFSCmd,

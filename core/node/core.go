@@ -11,11 +11,11 @@ import (
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-filestore"
-	"github.com/ipfs/go-ipfs-blockstore"
-	"github.com/ipfs/go-ipfs-exchange-interface"
-	"github.com/ipfs/go-ipfs-pinner"
+	blockstore "github.com/ipfs/go-ipfs-blockstore"
+	exchange "github.com/ipfs/go-ipfs-exchange-interface"
+	pin "github.com/ipfs/go-ipfs-pinner"
 	"github.com/ipfs/go-ipfs-pinner/dspinner"
-	"github.com/ipfs/go-ipld-format"
+	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag"
 	"github.com/ipfs/go-mfs"
 	"github.com/ipfs/go-unixfs"
@@ -83,8 +83,14 @@ func (s *syncDagService) Session(ctx context.Context) format.NodeGetter {
 }
 
 // Dag creates new DAGService
-func Dag(bs blockservice.BlockService) format.DAGService {
-	return merkledag.NewDAGService(bs)
+func Dag(bcfg *BuildCfg) interface{} {
+	return func(bs blockservice.BlockService) format.DAGService {
+		out := merkledag.NewDAGService(bs)
+		if bcfg.WrapDAG != nil {
+			return bcfg.WrapDAG(out)
+		}
+		return out
+	}
 }
 
 // OnlineExchange creates new LibP2P backed block exchange (BitSwap)

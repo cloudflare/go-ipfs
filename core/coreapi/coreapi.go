@@ -19,11 +19,11 @@ import (
 	"fmt"
 
 	bserv "github.com/ipfs/go-blockservice"
-	"github.com/ipfs/go-ipfs-blockstore"
-	"github.com/ipfs/go-ipfs-exchange-interface"
+	blockstore "github.com/ipfs/go-ipfs-blockstore"
+	exchange "github.com/ipfs/go-ipfs-exchange-interface"
 	offlinexch "github.com/ipfs/go-ipfs-exchange-offline"
-	"github.com/ipfs/go-ipfs-pinner"
-	"github.com/ipfs/go-ipfs-provider"
+	pin "github.com/ipfs/go-ipfs-pinner"
+	provider "github.com/ipfs/go-ipfs-provider"
 	offlineroute "github.com/ipfs/go-ipfs-routing/offline"
 	ipld "github.com/ipfs/go-ipld-format"
 	dag "github.com/ipfs/go-merkledag"
@@ -38,6 +38,7 @@ import (
 	record "github.com/libp2p/go-libp2p-record"
 	madns "github.com/multiformats/go-multiaddr-dns"
 
+	blocklist "github.com/cloudflare/go-ipfs-blocklist"
 	"github.com/ipfs/go-ipfs/core"
 	"github.com/ipfs/go-ipfs/core/node"
 	"github.com/ipfs/go-ipfs/repo"
@@ -70,6 +71,8 @@ type CoreAPI struct {
 	provider provider.System
 
 	pubSub *pubsub.PubSub
+
+	safeMode blocklist.Blocklist
 
 	checkPublishAllowed func() error
 	checkOnline         func(allowOffline bool) error
@@ -142,6 +145,11 @@ func (api *CoreAPI) PubSub() coreiface.PubSubAPI {
 	return (*PubSubAPI)(api)
 }
 
+// Safemode returns the SafemodeAPI interface implementation backed by the go-ipfs node
+func (api *CoreAPI) Safemode() coreiface.SafemodeAPI {
+	return (*SafemodeAPI)(api)
+}
+
 // WithOptions returns api with global options applied
 func (api *CoreAPI) WithOptions(opts ...options.ApiOption) (coreiface.CoreAPI, error) {
 	settings := api.parentOpts // make sure to copy
@@ -181,6 +189,8 @@ func (api *CoreAPI) WithOptions(opts ...options.ApiOption) (coreiface.CoreAPI, e
 		provider: n.Provider,
 
 		pubSub: n.PubSub,
+
+		safeMode: blocklist.NewDatastoreBlocklist(n.Repo.Datastore()),
 
 		nd:         n,
 		parentOpts: settings,

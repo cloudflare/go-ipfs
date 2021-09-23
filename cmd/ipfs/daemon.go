@@ -16,6 +16,7 @@ import (
 
 	multierror "github.com/hashicorp/go-multierror"
 
+	blocklist "github.com/cloudflare/go-ipfs-blocklist"
 	version "github.com/ipfs/go-ipfs"
 	config "github.com/ipfs/go-ipfs-config"
 	cserial "github.com/ipfs/go-ipfs-config/serialize"
@@ -27,9 +28,11 @@ import (
 	corehttp "github.com/ipfs/go-ipfs/core/corehttp"
 	corerepo "github.com/ipfs/go-ipfs/core/corerepo"
 	libp2p "github.com/ipfs/go-ipfs/core/node/libp2p"
+	safemode "github.com/ipfs/go-ipfs/core/node/safemode"
 	nodeMount "github.com/ipfs/go-ipfs/fuse/node"
 	fsrepo "github.com/ipfs/go-ipfs/repo/fsrepo"
 	"github.com/ipfs/go-ipfs/repo/fsrepo/migrations"
+	ipld "github.com/ipfs/go-ipld-format"
 	sockets "github.com/libp2p/go-socket-activation"
 
 	cmds "github.com/ipfs/go-ipfs-cmds"
@@ -65,6 +68,7 @@ const (
 	writableKwd               = "writable"
 	enablePubSubKwd           = "enable-pubsub-experiment"
 	enableIPNSPubSubKwd       = "enable-namesys-pubsub"
+	safemodeKwd               = "safemode"
 	enableMultiplexKwd        = "enable-mplex-experiment"
 	// apiAddrKwd    = "address-api"
 	// swarmAddrKwd  = "address-swarm"
@@ -178,6 +182,7 @@ Headers.
 		cmds.BoolOption(migrateKwd, "If true, assume yes at the migrate prompt. If false, assume no."),
 		cmds.BoolOption(enablePubSubKwd, "Instantiate the ipfs daemon with the experimental pubsub feature enabled."),
 		cmds.BoolOption(enableIPNSPubSubKwd, "Enable IPNS record distribution through pubsub; enables pubsub."),
+		cmds.BoolOption(safemodeKwd, "Enable safemode preventing content from the node blocklist to be provided."),
 		cmds.BoolOption(enableMultiplexKwd, "DEPRECATED"),
 
 		// TODO: add way to override addresses. tricky part: updating the config if also --init.
@@ -355,6 +360,16 @@ func daemonFunc(req *cmds.Request, re cmds.ResponseEmitter, env cmds.Environment
 		log.Errorf("To disable this multiplexer, please configure `Swarm.Transports.Multiplexers'.")
 	}
 
+	var bl blocklist.Blocklist
+	var wrapDAG func(ipld.DAGService) ipld.DAGService
+	safemodeEnabled, _ := req.Options[safemodeKwd].(bool)
+	if safemodeEnabled {
+		bl = blocklist.NewDatastoreBlocklist(repo.Datastore())
+		wrapDAG = func(dag ipld.DAGService) ipld.DAGService {
+			return safemode.WrapDAG(dag, bl)
+		}
+	}
+
 	// Start assembling node config
 	ncfg := &core.BuildCfg{
 		Repo:                        repo,
@@ -365,6 +380,7 @@ func daemonFunc(req *cmds.Request, re cmds.ResponseEmitter, env cmds.Environment
 			"pubsub": pubsub,
 			"ipnsps": ipnsps,
 		},
+		WrapDAG: wrapDAG,
 		//TODO(Kubuxu): refactor Online vs Offline by adding Permanent vs Ephemeral
 	}
 
@@ -393,6 +409,9 @@ func daemonFunc(req *cmds.Request, re cmds.ResponseEmitter, env cmds.Environment
 		ncfg.Routing = libp2p.NilRouterOption
 	default:
 		return fmt.Errorf("unrecognized routing option: %s", routingOption)
+	}
+	if safemodeEnabled {
+		ncfg.Routing = safemode.WrapRouter(ncfg.Routing, bl)
 	}
 
 	node, err := core.NewNode(req.Context, ncfg)
