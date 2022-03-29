@@ -11,7 +11,7 @@ require (
 	github.com/fatih/color v1.9.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
-	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.3.2
 	github.com/hashicorp/go-multierror v1.0.0
 	github.com/hashicorp/golang-lru v0.5.4
@@ -102,7 +102,7 @@ require (
 	github.com/whyrusleeping/multiaddr-filter v0.0.0-20160516205228-e903e4adabd7
 	github.com/whyrusleeping/tar-utils v0.0.0-20180509141711-8c6c8ba81d5c
 	go.uber.org/fx v1.10.0
-	golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9
+	golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f
 	gopkg.in/cheggaaa/pb.v1 v1.0.28
 )
 
