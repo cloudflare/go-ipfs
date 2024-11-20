@@ -73,11 +73,6 @@ type UnixfsAPI interface {
 	// to operations performed on the returned file
 	Get(context.Context, path.Path) (files.Node, error)
 
-	// GetWithProof returns a read-only handle to a file tree referenced by path
-	//
-	// It is output in a way that it can be verified by an untrusting client.
-	GetWithProof(context.Context, path.Path) (ProofReader, error)
-
 	// Ls returns the list of links in a directory. Links aren't guaranteed to be
 	// returned in order
 	Ls(context.Context, path.Path, ...options.UnixfsLsOption) (<-chan DirEntry, error)
